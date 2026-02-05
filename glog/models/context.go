@@ -1,6 +1,8 @@
 package models
 
+type contextKey string
+
 const (
-	AppID   = "app_id"
-	EnvName = "env"
+	AppID   contextKey = "app_id"
+	EnvName contextKey = "env"
 )

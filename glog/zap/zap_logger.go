@@ -71,14 +71,15 @@ func (l *Logger) getPayloadFields(logData *models.LogData) []zap.Field {
 	var resFields []zap.Field
 	resFields = append(resFields, zap.Namespace("payload"))
 	for _, f := range logData.Fields {
-		if f.Integer != 0 {
+		switch f.Type {
+		case models.FieldTypeInt:
 			resFields = append(resFields, zap.Int(f.Key, f.Integer))
-		}
-		if f.String != "" {
+		case models.FieldTypeString:
 			resFields = append(resFields, zap.String(f.Key, f.String))
-		}
-		if f.Float != 0.0 {
+		case models.FieldTypeFloat:
 			resFields = append(resFields, zap.Float64(f.Key, f.Float))
+		case models.FieldTypeObject:
+			resFields = append(resFields, zap.Any(f.Key, f.Object))
 		}
 	}
 	return resFields

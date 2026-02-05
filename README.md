@@ -15,7 +15,7 @@ A flexible, high-performance logging library for Go applications with support fo
 ## Installation
 
 ```bash
-go get github.com/yourusername/go-glog
+go get github.com/alexnobleburn/glogger
 ```
 
 ## Quick Start

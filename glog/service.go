@@ -22,6 +22,8 @@ type LoggerService struct {
 	numWorkers int
 	mutex      sync.RWMutex
 	loggers    map[string]interfaces.LogPublisher
+	wg         sync.WaitGroup
+	mainWg     sync.WaitGroup
 }
 
 func NewLoggerService(stopCh chan struct{}) *LoggerService {
@@ -51,47 +53,82 @@ func (ls *LoggerService) GetInputChan() chan<- *models.LogData {
 }
 
 func (ls *LoggerService) Start() {
+	ls.mainWg.Add(1)
 	go ls.runMainWorker()
 
+	ls.wg.Add(ls.numWorkers)
 	for i := 0; i < ls.numWorkers; i++ {
 		go ls.runWorker()
 	}
 }
 
+func (ls *LoggerService) Stop() {
+	// Close input channel to signal no more logs will be sent
+	close(ls.inputCh)
+
+	// Wait for main worker to drain input channel and close job channel
+	ls.mainWg.Wait()
+
+	// Wait for all workers to finish processing jobs
+	ls.wg.Wait()
+}
+
 func (ls *LoggerService) runMainWorker() {
+	defer ls.mainWg.Done()
 	defer close(ls.jobCh)
 	for {
 		select {
 		case <-ls.stopCh:
+			// Drain remaining logs from input channel
+			for logData := range ls.inputCh {
+				ls.processLogData(logData)
+			}
 			return
-		case logData := <-ls.inputCh:
-			if logData == nil {
-				continue
+		case logData, ok := <-ls.inputCh:
+			if !ok {
+				return
 			}
-			ls.mutex.RLock()
-			if len(ls.loggers) == 0 {
-				fmt.Println("No loggers configured. Skipping log message.")
-				continue
-			}
-			for id, logger := range ls.loggers {
-				if logger == nil {
-					fmt.Printf("Logger with ID %q is nil. Skipping.\n", id)
-					continue
-				}
-				job := sendJob{
-					loggerID: id,
-					logger:   logger,
-					logData:  logData,
-				}
-
-				ls.jobCh <- job
-			}
-			ls.mutex.RUnlock()
+			ls.processLogData(logData)
 		}
 	}
 }
 
+func (ls *LoggerService) processLogData(logData *models.LogData) {
+	if logData == nil {
+		return
+	}
+
+	// Copy loggers while holding lock
+	ls.mutex.RLock()
+	if len(ls.loggers) == 0 {
+		ls.mutex.RUnlock()
+		fmt.Println("No loggers configured. Skipping log message.")
+		return
+	}
+
+	// Create a slice of jobs while holding lock
+	jobs := make([]sendJob, 0, len(ls.loggers))
+	for id, logger := range ls.loggers {
+		if logger == nil {
+			fmt.Printf("Logger with ID %q is nil. Skipping.\n", id)
+			continue
+		}
+		jobs = append(jobs, sendJob{
+			loggerID: id,
+			logger:   logger,
+			logData:  logData,
+		})
+	}
+	ls.mutex.RUnlock()
+
+	// Send jobs without holding lock
+	for _, job := range jobs {
+		ls.jobCh <- job
+	}
+}
+
 func (ls *LoggerService) runWorker() {
+	defer ls.wg.Done()
 	for job := range ls.jobCh {
 		ls.processJob(job)
 	}

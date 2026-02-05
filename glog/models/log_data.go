@@ -55,6 +55,15 @@ const (
 	FieldFilenameKey  = "filename"
 )
 
+type FieldType int8
+
+const (
+	FieldTypeString FieldType = iota
+	FieldTypeInt
+	FieldTypeFloat
+	FieldTypeObject
+)
+
 type LogData struct {
 	Ctx    context.Context
 	Msg    string
@@ -64,6 +73,7 @@ type LogData struct {
 
 type LogField struct {
 	Key     string
+	Type    FieldType
 	Integer int
 	Float   float64
 	String  string

@@ -50,12 +50,12 @@ func (l *Logger) error(ctx context.Context, err error, opts *models.Options) {
 			stacktrace := stackTracerErr.StackTrace()
 			if len(stacktrace) > 0 {
 				for i := 1; i < len(stacktrace); i++ {
-					fileNames = append(fileNames, fmt.Sprintf("%s:%d", stacktrace[i], stacktrace[i]))
+					fileNames = append(fileNames, fmt.Sprintf("%+v", stacktrace[i]))
 				}
 			}
 		}
 		logData.Fields = append(logData.Fields,
-			&models.LogField{Key: models.FieldFilenameKey, String: strings.Join(fileNames, " <- ")})
+			&models.LogField{Key: models.FieldFilenameKey, Type: models.FieldTypeString, String: strings.Join(fileNames, " <- ")})
 	}
 
 	if len(opts.GetFields()) > 0 {
@@ -63,10 +63,10 @@ func (l *Logger) error(ctx context.Context, err error, opts *models.Options) {
 	}
 	if opts.GetComponent() != "" {
 		logData.Fields = append(logData.Fields,
-			&models.LogField{Key: models.FieldComponentKey, String: opts.GetComponent()})
+			&models.LogField{Key: models.FieldComponentKey, Type: models.FieldTypeString, String: opts.GetComponent()})
 	}
 
-	go l.sendData(logData)
+	l.sendData(logData)
 }
 
 func (l *Logger) Warning(ctx context.Context, message string, options ...models.Option) {
@@ -91,16 +91,19 @@ func (l *Logger) logMsg(ctx context.Context, level models.LogLevel, message stri
 		SetComponent(opts.GetComponent()).
 		SetFields(opts.GetFields()...)
 	logData := &models.LogData{
-		Ctx: ctx,
-		Msg: logMsg.Message,
-		Fields: append(
-			logMsg.Fields,
-			&models.LogField{Key: models.FieldComponentKey, String: logMsg.Component},
-		),
-		Level: logMsg.Level,
+		Ctx:    ctx,
+		Msg:    logMsg.Message,
+		Fields: logMsg.Fields,
+		Level:  logMsg.Level,
 	}
 
-	go l.sendData(logData)
+	// Only add component if it's not empty
+	if logMsg.Component != "" {
+		logData.Fields = append(logData.Fields,
+			&models.LogField{Key: models.FieldComponentKey, Type: models.FieldTypeString, String: logMsg.Component})
+	}
+
+	l.sendData(logData)
 }
 
 func (l *Logger) sendData(logData *models.LogData) {

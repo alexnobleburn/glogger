@@ -37,7 +37,7 @@ func TestZapLogger_SendMsg_InfoLevel(t *testing.T) {
 		Msg:   "test info message",
 		Level: models.InfoLevel,
 		Fields: []*models.LogField{
-			{Key: "test_field", String: "test_value"},
+			{Key: "test_field", Type: models.FieldTypeString, String: "test_value"},
 		},
 	}
 
@@ -53,7 +53,7 @@ func TestZapLogger_SendMsg_ErrorLevel(t *testing.T) {
 		Msg:   "test error message",
 		Level: models.ErrorLevel,
 		Fields: []*models.LogField{
-			{Key: "error", String: "something went wrong"},
+			{Key: "error", Type: models.FieldTypeString, String: "something went wrong"},
 		},
 	}
 
@@ -95,9 +95,9 @@ func TestZapLogger_SendMsg_WithFields(t *testing.T) {
 		Msg:   "test message with fields",
 		Level: models.InfoLevel,
 		Fields: []*models.LogField{
-			{Key: "int_field", Integer: 42},
-			{Key: "float_field", Float: 3.14},
-			{Key: "string_field", String: "test"},
+			{Key: "int_field", Type: models.FieldTypeInt, Integer: 42},
+			{Key: "float_field", Type: models.FieldTypeFloat, Float: 3.14},
+			{Key: "string_field", Type: models.FieldTypeString, String: "test"},
 		},
 	}
 
@@ -158,9 +158,9 @@ func TestZapLogger_GetPayloadFields(t *testing.T) {
 		Msg:   "test",
 		Level: models.InfoLevel,
 		Fields: []*models.LogField{
-			{Key: "int_field", Integer: 42},
-			{Key: "float_field", Float: 3.14},
-			{Key: "string_field", String: "test"},
+			{Key: "int_field", Type: models.FieldTypeInt, Integer: 42},
+			{Key: "float_field", Type: models.FieldTypeFloat, Float: 3.14},
+			{Key: "string_field", Type: models.FieldTypeString, String: "test"},
 		},
 	}
 
@@ -198,17 +198,18 @@ func TestZapLogger_GetPayloadFields_ZeroValues(t *testing.T) {
 		Msg:   "test",
 		Level: models.InfoLevel,
 		Fields: []*models.LogField{
-			{Key: "int_field", Integer: 0},    // Should be skipped
-			{Key: "float_field", Float: 0.0},  // Should be skipped
-			{Key: "string_field", String: ""}, // Should be skipped
+			{Key: "int_field", Type: models.FieldTypeInt, Integer: 0},       // Should now be logged
+			{Key: "float_field", Type: models.FieldTypeFloat, Float: 0.0},   // Should now be logged
+			{Key: "string_field", Type: models.FieldTypeString, String: ""}, // Should now be logged
 		},
 	}
 
 	fields := logger.getPayloadFields(logData)
 
-	// Only namespace should be present since all values are zero
-	if len(fields) != 1 {
-		t.Errorf("expected only namespace field, got %d fields", len(fields))
+	// With field type indicator, zero values should now be logged
+	// Expected: namespace + 3 fields = 4 total
+	if len(fields) != 4 {
+		t.Errorf("expected 4 fields (namespace + 3 zero-value fields), got %d fields", len(fields))
 	}
 }
 
@@ -235,9 +236,9 @@ func BenchmarkZapLogger_SendMsg_WithFields(b *testing.B) {
 		Msg:   "benchmark message",
 		Level: models.InfoLevel,
 		Fields: []*models.LogField{
-			{Key: "field1", String: "value1"},
-			{Key: "field2", Integer: 42},
-			{Key: "field3", Float: 3.14},
+			{Key: "field1", Type: models.FieldTypeString, String: "value1"},
+			{Key: "field2", Type: models.FieldTypeInt, Integer: 42},
+			{Key: "field3", Type: models.FieldTypeFloat, Float: 3.14},
 		},
 	}
 
