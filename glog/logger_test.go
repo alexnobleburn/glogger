@@ -38,9 +38,8 @@ func (m *mockPublisher) Reset() {
 	m.logs = nil
 }
 
-func setupTestLogger() (*Logger, *mockPublisher, chan struct{}) {
-	stopCh := make(chan struct{})
-	loggerService := NewLoggerService(stopCh)
+func setupTestLogger() (*Logger, *mockPublisher, *LoggerService) {
+	loggerService := NewLoggerService()
 
 	mock := &mockPublisher{logs: make([]*models.LogData, 0)}
 	loggerService.AddLogger("mock", mock)
@@ -48,12 +47,12 @@ func setupTestLogger() (*Logger, *mockPublisher, chan struct{}) {
 
 	logger := NewLogger(loggerService.GetInputChan())
 
-	return logger, mock, stopCh
+	return logger, mock, loggerService
 }
 
 func TestLogger_Info(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	message := "test info message"
@@ -76,8 +75,8 @@ func TestLogger_Info(t *testing.T) {
 }
 
 func TestLogger_Error(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	err := fmt.Errorf("test error")
@@ -100,8 +99,8 @@ func TestLogger_Error(t *testing.T) {
 }
 
 func TestLogger_ErrorWithStackTrace(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	err := fmt.Errorf("test error with stack")
@@ -131,8 +130,8 @@ func TestLogger_ErrorWithStackTrace(t *testing.T) {
 }
 
 func TestLogger_Warning(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	message := "test warning"
@@ -151,8 +150,8 @@ func TestLogger_Warning(t *testing.T) {
 }
 
 func TestLogger_Debug(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	message := "test debug"
@@ -171,8 +170,8 @@ func TestLogger_Debug(t *testing.T) {
 }
 
 func TestLogger_Errors(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	errs := []error{
@@ -212,8 +211,8 @@ func TestLogger_Errors(t *testing.T) {
 }
 
 func TestLogger_WithComponent(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	component := "test-component"
@@ -240,8 +239,8 @@ func TestLogger_WithComponent(t *testing.T) {
 }
 
 func TestLogger_WithFields(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 
@@ -287,8 +286,8 @@ func TestLogger_WithFields(t *testing.T) {
 }
 
 func TestLogger_ContextValues(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.WithValue(context.Background(), models.AppID, "test-app")
 	ctx = context.WithValue(ctx, models.EnvName, "test-env")
@@ -308,8 +307,8 @@ func TestLogger_ContextValues(t *testing.T) {
 }
 
 func TestLogger_ConcurrentLogging(t *testing.T) {
-	logger, mock, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, mock, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	numGoroutines := 10
@@ -338,8 +337,8 @@ func TestLogger_ConcurrentLogging(t *testing.T) {
 }
 
 func BenchmarkLogger_Info(b *testing.B) {
-	logger, _, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, _, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 
@@ -350,8 +349,8 @@ func BenchmarkLogger_Info(b *testing.B) {
 }
 
 func BenchmarkLogger_ErrorWithStackTrace(b *testing.B) {
-	logger, _, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, _, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 	err := fmt.Errorf("benchmark error")
@@ -363,8 +362,8 @@ func BenchmarkLogger_ErrorWithStackTrace(b *testing.B) {
 }
 
 func BenchmarkLogger_WithMultipleFields(b *testing.B) {
-	logger, _, stopCh := setupTestLogger()
-	defer close(stopCh)
+	logger, _, service := setupTestLogger()
+	defer service.Stop()
 
 	ctx := context.Background()
 

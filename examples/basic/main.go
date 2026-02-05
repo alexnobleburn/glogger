@@ -12,29 +12,25 @@ import (
 func main() {
 	fmt.Println("=== Basic Logger Example ===")
 
-	// Step 1: Create stop channel for graceful shutdown
-	stopCh := make(chan struct{})
+	// Step 1: Initialize logger service
+	loggerService := glog.NewLoggerService()
 	defer func() {
 		fmt.Println("\nShutting down logger...")
-		close(stopCh)
-		time.Sleep(200 * time.Millisecond) // Allow logs to flush
+		loggerService.Stop() // Gracefully shutdown and flush all logs
 		fmt.Println("Logger shutdown complete")
 	}()
 
-	// Step 2: Initialize logger service
-	loggerService := glog.NewLoggerService(stopCh)
-
-	// Step 3: Add Zap publisher (outputs JSON to stdout)
+	// Step 2: Add Zap publisher (outputs JSON to stdout)
 	zapLogger := zap.NewZapLogger("basic-example", "development")
 	loggerService.AddLogger("zap", zapLogger)
 
-	// Step 4: Start the service (starts worker pool)
+	// Step 3: Start the service (starts worker pool)
 	loggerService.Start()
 
-	// Step 5: Create logger instance for your application
+	// Step 4: Create logger instance for your application
 	log := glog.NewLogger(loggerService.GetInputChan())
 
-	// Step 6: Start logging!
+	// Step 5: Start logging!
 	ctx := context.Background()
 
 	// Basic info log

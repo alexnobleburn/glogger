@@ -32,12 +32,9 @@ import (
 )
 
 func main() {
-	// Create stop channel
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-
-	// Initialize glog service
-	loggerService := glog.NewLoggerService(stopCh)
+	// Initialize logger service
+	loggerService := glog.NewLoggerService()
+	defer loggerService.Stop() // Graceful shutdown
 
 	// Add Zap glog publisher
 	zapLogger := zap.NewZapLogger("my-app", "production")
@@ -209,7 +206,7 @@ The logger service has sensible defaults:
 2. **Use components**: Tag logs with component names for easier filtering
 3. **Structured fields**: Use typed fields instead of formatting strings
 4. **Stack traces sparingly**: Only enable for errors that need debugging
-5. **Graceful shutdown**: Close the stop channel to cleanly shutdown the service
+5. **Graceful shutdown**: Call `loggerService.Stop()` to cleanly shutdown the service and flush all logs
 
 ## Contributing
 

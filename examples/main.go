@@ -6,19 +6,12 @@ import (
 	"github.com/alexnobleburn/glogger/glog"
 	"github.com/alexnobleburn/glogger/glog/models"
 	"github.com/alexnobleburn/glogger/glog/zap"
-	"time"
 )
 
 func main() {
-	// Create stop channel for graceful shutdown
-	stopCh := make(chan struct{})
-	defer func() {
-		close(stopCh)
-		time.Sleep(200 * time.Millisecond) // Allow logs to flush
-	}()
-
 	// Initialize logger service
-	loggerService := glog.NewLoggerService(stopCh)
+	loggerService := glog.NewLoggerService()
+	defer loggerService.Stop() // Gracefully shutdown and flush all logs
 
 	// Add Zap logger publisher
 	zapLogger := zap.NewZapLogger("example-app", "development")

@@ -18,7 +18,6 @@ const (
 type LoggerService struct {
 	inputCh    chan *models.LogData
 	jobCh      chan sendJob
-	stopCh     chan struct{}
 	numWorkers int
 	mutex      sync.RWMutex
 	loggers    map[string]interfaces.LogPublisher
@@ -26,12 +25,11 @@ type LoggerService struct {
 	mainWg     sync.WaitGroup
 }
 
-func NewLoggerService(stopCh chan struct{}) *LoggerService {
+func NewLoggerService() *LoggerService {
 	return &LoggerService{
 		inputCh:    make(chan *models.LogData, defaultInputBufferSize),
 		jobCh:      make(chan sendJob, defaultJobBufferSize),
 		loggers:    make(map[string]interfaces.LogPublisher),
-		stopCh:     stopCh,
 		numWorkers: defaultNumWorkers,
 	}
 }
@@ -76,20 +74,8 @@ func (ls *LoggerService) Stop() {
 func (ls *LoggerService) runMainWorker() {
 	defer ls.mainWg.Done()
 	defer close(ls.jobCh)
-	for {
-		select {
-		case <-ls.stopCh:
-			// Drain remaining logs from input channel
-			for logData := range ls.inputCh {
-				ls.processLogData(logData)
-			}
-			return
-		case logData, ok := <-ls.inputCh:
-			if !ok {
-				return
-			}
-			ls.processLogData(logData)
-		}
+	for logData := range ls.inputCh {
+		ls.processLogData(logData)
 	}
 }
 
