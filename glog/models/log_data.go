@@ -62,6 +62,7 @@ const (
 	FieldTypeInt
 	FieldTypeFloat
 	FieldTypeObject
+	FieldTypeBool
 )
 
 type LogData struct {
@@ -77,5 +78,6 @@ type LogField struct {
 	Integer int
 	Float   float64
 	String  string
+	Bool    bool
 	Object  interface{}
 }

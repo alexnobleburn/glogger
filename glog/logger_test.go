@@ -45,9 +45,22 @@ func setupTestLogger() (*Logger, *mockPublisher, *LoggerService) {
 	loggerService.AddLogger("mock", mock)
 	loggerService.Start()
 
-	logger := NewLogger(loggerService.GetInputChan())
+	logger := loggerService.NewLogger()
 
 	return logger, mock, loggerService
+}
+
+// waitForLogs polls until the mock has at least n logs or timeout.
+func waitForLogs(mock *mockPublisher, n int, timeout time.Duration) []*models.LogData {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		logs := mock.GetLogs()
+		if len(logs) >= n {
+			return logs
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return mock.GetLogs()
 }
 
 func TestLogger_Info(t *testing.T) {
@@ -58,9 +71,8 @@ func TestLogger_Info(t *testing.T) {
 	message := "test info message"
 
 	logger.Info(ctx, message)
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
@@ -82,9 +94,8 @@ func TestLogger_Error(t *testing.T) {
 	err := fmt.Errorf("test error")
 
 	logger.Error(ctx, err)
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
@@ -106,14 +117,12 @@ func TestLogger_ErrorWithStackTrace(t *testing.T) {
 	err := fmt.Errorf("test error with stack")
 
 	logger.Error(ctx, err, models.WithStackTrace())
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
 
-	// Check if filename field exists
 	hasFilename := false
 	for _, field := range logs[0].Fields {
 		if field.Key == models.FieldFilenameKey {
@@ -137,9 +146,8 @@ func TestLogger_Warning(t *testing.T) {
 	message := "test warning"
 
 	logger.Warning(ctx, message)
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
@@ -157,9 +165,8 @@ func TestLogger_Debug(t *testing.T) {
 	message := "test debug"
 
 	logger.Debug(ctx, message)
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
@@ -181,14 +188,12 @@ func TestLogger_Errors(t *testing.T) {
 	}
 
 	logger.Errors(ctx, errs)
-	time.Sleep(100 * time.Millisecond)
+	logs := waitForLogs(mock, len(errs), time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != len(errs) {
 		t.Fatalf("expected %d logs, got %d", len(errs), len(logs))
 	}
 
-	// Check that all error messages are present (order not guaranteed due to async)
 	expectedMessages := make(map[string]bool)
 	for _, err := range errs {
 		expectedMessages[err.Error()] = false
@@ -202,7 +207,6 @@ func TestLogger_Errors(t *testing.T) {
 		}
 	}
 
-	// Verify all expected messages were found
 	for msg, found := range expectedMessages {
 		if !found {
 			t.Errorf("expected message %q not found in logs", msg)
@@ -218,9 +222,8 @@ func TestLogger_WithComponent(t *testing.T) {
 	component := "test-component"
 
 	logger.Info(ctx, "test message", models.WithComponent(component))
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
@@ -250,9 +253,8 @@ func TestLogger_WithFields(t *testing.T) {
 		models.WithStringField("string_field", "test"),
 		models.WithObjectField("object_field", map[string]string{"key": "value"}))
 
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
@@ -262,7 +264,6 @@ func TestLogger_WithFields(t *testing.T) {
 		t.Errorf("expected at least 4 fields, got %d", len(fields))
 	}
 
-	// Verify fields exist
 	fieldMap := make(map[string]*models.LogField)
 	for _, field := range fields {
 		fieldMap[field.Key] = field
@@ -293,14 +294,12 @@ func TestLogger_ContextValues(t *testing.T) {
 	ctx = context.WithValue(ctx, models.EnvName, "test-env")
 
 	logger.Info(ctx, "test message")
-	time.Sleep(50 * time.Millisecond)
+	logs := waitForLogs(mock, 1, time.Second)
 
-	logs := mock.GetLogs()
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(logs))
 	}
 
-	// Context values should be passed through
 	if logs[0].Ctx == nil {
 		t.Error("expected context to be set")
 	}
@@ -327,13 +326,75 @@ func TestLogger_ConcurrentLogging(t *testing.T) {
 	}
 
 	wg.Wait()
-	time.Sleep(100 * time.Millisecond)
 
-	logs := mock.GetLogs()
 	expectedLogs := numGoroutines * logsPerGoroutine
+	logs := waitForLogs(mock, expectedLogs, 2*time.Second)
+
 	if len(logs) != expectedLogs {
 		t.Errorf("expected %d logs, got %d", expectedLogs, len(logs))
 	}
+}
+
+func TestLogger_GracefulShutdown(t *testing.T) {
+	loggerService := NewLoggerService()
+	mock := &mockPublisher{logs: make([]*models.LogData, 0)}
+	loggerService.AddLogger("mock", mock)
+	loggerService.Start()
+	logger := loggerService.NewLogger()
+
+	ctx := context.Background()
+	n := 50
+	for i := 0; i < n; i++ {
+		logger.Info(ctx, fmt.Sprintf("message %d", i))
+	}
+
+	loggerService.Stop()
+
+	logs := mock.GetLogs()
+	if len(logs) != n {
+		t.Errorf("expected %d logs after graceful shutdown, got %d", n, len(logs))
+	}
+}
+
+func TestLogger_DoubleStop(t *testing.T) {
+	loggerService := NewLoggerService()
+	mock := &mockPublisher{logs: make([]*models.LogData, 0)}
+	loggerService.AddLogger("mock", mock)
+	loggerService.Start()
+
+	// Double Stop should not panic
+	loggerService.Stop()
+	loggerService.Stop()
+}
+
+func TestLogger_WriteAfterStop(t *testing.T) {
+	loggerService := NewLoggerService()
+	mock := &mockPublisher{logs: make([]*models.LogData, 0)}
+	loggerService.AddLogger("mock", mock)
+	loggerService.Start()
+	logger := loggerService.NewLogger()
+
+	loggerService.Stop()
+
+	// Writing after Stop should not panic — message is silently dropped
+	logger.Info(context.Background(), "after stop")
+}
+
+func TestLogger_PublisherPanic(t *testing.T) {
+	loggerService := NewLoggerService(WithErrorHandler(func(err error) {}))
+	panicPublisher := &mockPublisher{
+		sendFunc: func(data *models.LogData) {
+			panic("publisher crashed")
+		},
+	}
+	loggerService.AddLogger("panic", panicPublisher)
+	loggerService.Start()
+	logger := loggerService.NewLogger()
+
+	logger.Info(context.Background(), "trigger panic")
+
+	// Stop should not deadlock despite publisher panic
+	loggerService.Stop()
 }
 
 func BenchmarkLogger_Info(b *testing.B) {

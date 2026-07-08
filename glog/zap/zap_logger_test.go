@@ -3,6 +3,7 @@ package zap
 import (
 	"context"
 	"github.com/alexnobleburn/glogger/glog/models"
+	"io"
 	"testing"
 )
 
@@ -24,13 +25,13 @@ func TestNewZapLogger(t *testing.T) {
 		t.Errorf("expected env %q, got %q", env, logger.env)
 	}
 
-	if logger.Logger == nil {
+	if logger.zl == nil {
 		t.Error("expected non-nil zap.Logger")
 	}
 }
 
 func TestZapLogger_SendMsg_InfoLevel(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
@@ -41,12 +42,11 @@ func TestZapLogger_SendMsg_InfoLevel(t *testing.T) {
 		},
 	}
 
-	// Should not panic
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_SendMsg_ErrorLevel(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
@@ -57,12 +57,11 @@ func TestZapLogger_SendMsg_ErrorLevel(t *testing.T) {
 		},
 	}
 
-	// Should not panic
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_SendMsg_WarnLevel(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
@@ -70,12 +69,11 @@ func TestZapLogger_SendMsg_WarnLevel(t *testing.T) {
 		Level: models.WarnLevel,
 	}
 
-	// Should not panic
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_SendMsg_DebugLevel(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
@@ -83,12 +81,11 @@ func TestZapLogger_SendMsg_DebugLevel(t *testing.T) {
 		Level: models.DebugLevel,
 	}
 
-	// Should not panic
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_SendMsg_WithFields(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
@@ -98,28 +95,27 @@ func TestZapLogger_SendMsg_WithFields(t *testing.T) {
 			{Key: "int_field", Type: models.FieldTypeInt, Integer: 42},
 			{Key: "float_field", Type: models.FieldTypeFloat, Float: 3.14},
 			{Key: "string_field", Type: models.FieldTypeString, String: "test"},
+			{Key: "bool_field", Type: models.FieldTypeBool, Bool: true},
 		},
 	}
 
-	// Should not panic
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_SendMsg_NilContext(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
-		Ctx:   nil, // nil context should be handled
+		Ctx:   nil,
 		Msg:   "test message",
 		Level: models.InfoLevel,
 	}
 
-	// Should not panic, should use context.Background()
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_SendMsg_ContextValues(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	ctx := context.WithValue(context.Background(), models.AppID, "custom-app")
 	ctx = context.WithValue(ctx, models.EnvName, "custom-env")
@@ -130,12 +126,11 @@ func TestZapLogger_SendMsg_ContextValues(t *testing.T) {
 		Level: models.InfoLevel,
 	}
 
-	// Should use context values instead of logger defaults
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_SendMsg_EmptyContextValues(t *testing.T) {
-	logger := NewZapLogger("default-app", "default-env")
+	logger := NewZapLoggerWithWriter("default-app", "default-env", io.Discard)
 
 	ctx := context.WithValue(context.Background(), models.AppID, "")
 	ctx = context.WithValue(ctx, models.EnvName, "")
@@ -146,12 +141,11 @@ func TestZapLogger_SendMsg_EmptyContextValues(t *testing.T) {
 		Level: models.InfoLevel,
 	}
 
-	// Should fall back to logger defaults
 	logger.SendMsg(logData)
 }
 
 func TestZapLogger_GetPayloadFields(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
@@ -173,7 +167,7 @@ func TestZapLogger_GetPayloadFields(t *testing.T) {
 }
 
 func TestZapLogger_GetPayloadFields_EmptyFields(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:    context.Background(),
@@ -184,37 +178,34 @@ func TestZapLogger_GetPayloadFields_EmptyFields(t *testing.T) {
 
 	fields := logger.getPayloadFields(logData)
 
-	// Should have at least the namespace
 	if len(fields) < 1 {
 		t.Error("expected at least namespace field")
 	}
 }
 
 func TestZapLogger_GetPayloadFields_ZeroValues(t *testing.T) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
 		Msg:   "test",
 		Level: models.InfoLevel,
 		Fields: []*models.LogField{
-			{Key: "int_field", Type: models.FieldTypeInt, Integer: 0},       // Should now be logged
-			{Key: "float_field", Type: models.FieldTypeFloat, Float: 0.0},   // Should now be logged
-			{Key: "string_field", Type: models.FieldTypeString, String: ""}, // Should now be logged
+			{Key: "int_field", Type: models.FieldTypeInt, Integer: 0},
+			{Key: "float_field", Type: models.FieldTypeFloat, Float: 0.0},
+			{Key: "string_field", Type: models.FieldTypeString, String: ""},
 		},
 	}
 
 	fields := logger.getPayloadFields(logData)
 
-	// With field type indicator, zero values should now be logged
-	// Expected: namespace + 3 fields = 4 total
 	if len(fields) != 4 {
 		t.Errorf("expected 4 fields (namespace + 3 zero-value fields), got %d fields", len(fields))
 	}
 }
 
 func BenchmarkZapLogger_SendMsg(b *testing.B) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),
@@ -229,7 +220,7 @@ func BenchmarkZapLogger_SendMsg(b *testing.B) {
 }
 
 func BenchmarkZapLogger_SendMsg_WithFields(b *testing.B) {
-	logger := NewZapLogger("test-app", "test")
+	logger := NewZapLoggerWithWriter("test-app", "test", io.Discard)
 
 	logData := &models.LogData{
 		Ctx:   context.Background(),

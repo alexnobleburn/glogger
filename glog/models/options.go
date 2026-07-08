@@ -55,3 +55,9 @@ func WithObjectField(key string, value any) Option {
 		opts.fields = append(opts.fields, &LogField{Key: key, Type: FieldTypeObject, Object: value})
 	}
 }
+
+func WithBoolField(key string, value bool) Option {
+	return func(opts *Options) {
+		opts.fields = append(opts.fields, &LogField{Key: key, Type: FieldTypeBool, Bool: value})
+	}
+}

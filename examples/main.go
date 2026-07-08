@@ -1,4 +1,4 @@
-package examples
+package main
 
 import (
 	"context"
@@ -9,78 +9,58 @@ import (
 )
 
 func main() {
-	// Initialize logger service
-	loggerService := glog.NewLoggerService()
-	defer loggerService.Stop() // Gracefully shutdown and flush all logs
+	// Initialize and configure the service
+	service := glog.NewLoggerService(
+		glog.WithNumWorkers(4),
+		glog.WithSendTimeout(200),
+	)
+	defer service.Stop()
 
-	// Add Zap logger publisher
-	zapLogger := zap.NewZapLogger("example-app", "development")
-	loggerService.AddLogger("zap", zapLogger)
+	// Add Zap publisher
+	service.AddLogger("zap", zap.NewZapLogger("example-app", "development"))
+	service.Start()
 
-	// Start the service
-	loggerService.Start()
-
-	// Create logger instance
-	log := glog.NewLogger(loggerService.GetInputChan())
-
-	// Example 1: Basic info logging
+	// Create logger
+	log := service.NewLogger()
 	ctx := context.Background()
-	log.Info(ctx, "Application started successfully")
 
-	// Example 2: Logging with component
-	log.Info(ctx, "Database connection established",
+	// Info
+	log.Info(ctx, "Application started")
+
+	// Structured fields
+	log.Info(ctx, "Database connected",
 		models.WithComponent("database"),
 		models.WithStringField("host", "localhost"),
-		models.WithIntField("port", 5432))
+		models.WithIntField("port", 5432),
+		models.WithBoolField("ssl", true))
 
-	// Example 3: Warning with metrics
-	log.Warning(ctx, "High memory usage detected",
+	// Warning
+	log.Warning(ctx, "High memory usage",
 		models.WithComponent("monitor"),
-		models.WithFloatField("memory_usage_gb", 7.8),
-		models.WithIntField("threshold_gb", 8))
+		models.WithFloatField("memory_gb", 7.8))
 
-	// Example 4: Error logging with stack trace
-	err := simulateError()
-	if err != nil {
-		log.Error(ctx, err,
-			models.WithComponent("worker"),
-			models.WithStackTrace(),
-			models.WithStringField("operation", "data_processing"))
-	}
+	// Error with stack trace
+	err := fmt.Errorf("connection timeout")
+	log.Error(ctx, err,
+		models.WithComponent("worker"),
+		models.WithStackTrace())
 
-	// Example 5: Debug logging
-	log.Debug(ctx, "Cache lookup",
-		models.WithComponent("cache"),
-		models.WithStringField("key", "user:12345"),
-		models.WithStringField("result", "miss"))
+	// Context-aware logging
+	ctx = context.WithValue(ctx, models.AppID, "custom-service")
+	ctx = context.WithValue(ctx, models.EnvName, "staging")
+	log.Info(ctx, "Request processed with custom metadata")
 
-	// Example 6: Context-aware logging
-	ctxWithMetadata := context.WithValue(ctx, models.AppID, "custom-service")
-	ctxWithMetadata = context.WithValue(ctxWithMetadata, models.EnvName, "staging")
-	log.Info(ctxWithMetadata, "Request processed with custom metadata")
+	// Multiple errors
+	log.Errors(ctx, []error{
+		fmt.Errorf("invalid email"),
+		fmt.Errorf("missing required field"),
+	}, models.WithComponent("validation"))
 
-	// Example 7: Multiple errors
-	errors := []error{
-		fmt.Errorf("validation error: invalid email"),
-		fmt.Errorf("validation error: missing required field"),
-	}
-	log.Errors(ctx, errors,
-		models.WithComponent("validation"))
-
-	// Example 8: Structured logging with object
-	requestData := map[string]interface{}{
-		"method": "POST",
-		"path":   "/api/users",
-		"status": 201,
-	}
+	// Object field
 	log.Info(ctx, "HTTP request completed",
 		models.WithComponent("http"),
-		models.WithObjectField("request", requestData),
+		models.WithObjectField("request", map[string]any{
+			"method": "POST", "path": "/api/users", "status": 201,
+		}),
 		models.WithIntField("duration_ms", 45))
-
-	fmt.Println("\nAll examples logged successfully!")
-}
-
-func simulateError() error {
-	return fmt.Errorf("failed to process data: connection timeout")
 }

@@ -7,10 +7,15 @@ import (
 	"github.com/alexnobleburn/glogger/glog/models"
 	"github.com/pkg/errors"
 	"strings"
+	"sync/atomic"
 )
+
+// Compile-time check that Logger implements interfaces.Logger.
+var _ interfaces.Logger = (*Logger)(nil)
 
 type Logger struct {
 	logChan chan<- *models.LogData
+	stopped *atomic.Bool
 }
 
 func NewLogger(logChan chan<- *models.LogData) *Logger {
@@ -36,15 +41,15 @@ func (l *Logger) Errors(ctx context.Context, errs []error, options ...models.Opt
 }
 
 func (l *Logger) error(ctx context.Context, err error, opts *models.Options) {
-	extendedErr := errors.WithStack(err)
 	logData := &models.LogData{
 		Ctx:    ctx,
-		Msg:    extendedErr.Error(),
+		Msg:    err.Error(),
 		Fields: []*models.LogField{},
 		Level:  models.ErrorLevel,
 	}
 
 	if opts.WithStackTrace() {
+		extendedErr := errors.WithStack(err)
 		var fileNames []string
 		if stackTracerErr, ok := extendedErr.(interfaces.StackTracer); ok {
 			stacktrace := stackTracerErr.StackTrace()
@@ -87,25 +92,28 @@ func (l *Logger) logMsg(ctx context.Context, level models.LogLevel, message stri
 		opt(opts)
 	}
 
-	logMsg := models.NewLogMessage(level, message).
-		SetComponent(opts.GetComponent()).
-		SetFields(opts.GetFields()...)
 	logData := &models.LogData{
 		Ctx:    ctx,
-		Msg:    logMsg.Message,
-		Fields: logMsg.Fields,
-		Level:  logMsg.Level,
+		Msg:    message,
+		Fields: opts.GetFields(),
+		Level:  level,
 	}
 
-	// Only add component if it's not empty
-	if logMsg.Component != "" {
+	if opts.GetComponent() != "" {
 		logData.Fields = append(logData.Fields,
-			&models.LogField{Key: models.FieldComponentKey, Type: models.FieldTypeString, String: logMsg.Component})
+			&models.LogField{Key: models.FieldComponentKey, Type: models.FieldTypeString, String: opts.GetComponent()})
 	}
 
 	l.sendData(logData)
 }
 
 func (l *Logger) sendData(logData *models.LogData) {
-	l.logChan <- logData
+	if l.stopped != nil && l.stopped.Load() {
+		return
+	}
+	select {
+	case l.logChan <- logData:
+	default:
+		// Channel full — drop the message to maintain non-blocking guarantee.
+	}
 }
