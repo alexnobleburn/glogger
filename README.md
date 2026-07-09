@@ -4,13 +4,14 @@ A flexible, high-performance logging library for Go applications with support fo
 
 ## Features
 
-- 🚀 **High Performance**: Buffered channels and worker pools for efficient log processing
-- 🔌 **Pluggable Publishers**: Support for multiple log publishers (Zap included, easily extensible)
-- 📊 **Structured Logging**: Rich field support (int, float, string, object)
-- 🎯 **Context-Aware**: Extract metadata from context automatically
-- 🔍 **Stack Traces**: Optional stack trace capture for errors
-- ⚡ **Non-Blocking**: Asynchronous log processing with configurable timeouts
-- 🛡️ **Thread-Safe**: Safe for concurrent use
+- **High Performance**: Buffered channels and worker pools for efficient log processing
+- **Pluggable Publishers**: Support for multiple log publishers (Zap included, easily extensible)
+- **Structured Logging**: Rich field support (int, float, string, bool, object)
+- **Context-Aware**: Extract metadata from context automatically
+- **Stack Traces**: Optional stack trace capture for errors
+- **Non-Blocking**: Asynchronous log processing with configurable timeouts
+- **Thread-Safe**: Safe for concurrent use
+- **Configurable**: Functional options for service tuning
 
 ## Installation
 
@@ -33,18 +34,17 @@ import (
 
 func main() {
 	// Initialize logger service
-	loggerService := glog.NewLoggerService()
-	defer loggerService.Stop() // Graceful shutdown
+	service := glog.NewLoggerService()
+	defer service.Stop() // Graceful shutdown
 
-	// Add Zap glog publisher
-	zapLogger := zap.NewZapLogger("my-app", "production")
-	loggerService.AddLogger("zap", zapLogger)
+	// Add Zap publisher
+	service.AddLogger("zap", zap.NewZapLogger("my-app", "production"))
 
 	// Start the service
-	loggerService.Start()
+	service.Start()
 
-	// Create glog instance
-	log := glog.NewLogger(loggerService.GetInputChan())
+	// Create logger
+	log := service.NewLogger()
 
 	// Use it!
 	ctx := context.Background()
@@ -53,7 +53,6 @@ func main() {
 		models.WithComponent("main"),
 		models.WithStackTrace())
 }
-
 ```
 
 ## Usage Examples
@@ -64,7 +63,7 @@ func main() {
 ctx := context.Background()
 
 // Info logging
-log.Info(ctx, "User logged in", 
+log.Info(ctx, "User logged in",
     models.WithStringField("user_id", "12345"),
     models.WithComponent("auth"))
 
@@ -75,7 +74,7 @@ log.Warning(ctx, "API rate limit approaching",
 // Error logging
 err := someOperation()
 if err != nil {
-    log.Error(ctx, err, 
+    log.Error(ctx, err,
         models.WithComponent("operation"),
         models.WithStackTrace())
 }
@@ -102,6 +101,10 @@ log.Info(ctx, "User action",
     models.WithStringField("action", "login"),
     models.WithStringField("ip", "192.168.1.1"))
 
+// Bool field
+log.Info(ctx, "Feature flag",
+    models.WithBoolField("enabled", true))
+
 // Object field
 log.Info(ctx, "Request details",
     models.WithObjectField("request", req))
@@ -126,7 +129,7 @@ errs := []error{
     fmt.Errorf("cache unavailable"),
 }
 
-log.Errors(ctx, errs, 
+log.Errors(ctx, errs,
     models.WithComponent("initialization"))
 ```
 
@@ -143,8 +146,39 @@ func (p *CustomPublisher) SendMsg(data *models.LogData) {
 }
 
 // Add to service
-loggerService.AddLogger("custom", &CustomPublisher{})
+service.AddLogger("custom", &CustomPublisher{})
 ```
+
+Publishers can be removed at runtime:
+
+```go
+service.RemoveLogger("custom")
+```
+
+## Service Configuration
+
+`NewLoggerService` accepts functional options for tuning:
+
+```go
+service := glog.NewLoggerService(
+    glog.WithInputBufferSize(200),   // Input channel buffer (default: 100)
+    glog.WithJobBufferSize(2000),    // Job channel buffer (default: 1000)
+    glog.WithNumWorkers(8),          // Worker pool size (default: 4)
+    glog.WithSendTimeout(200 * time.Millisecond), // Publisher timeout (default: 100ms)
+    glog.WithErrorHandler(func(err error) {       // Custom error handler
+        sentry.CaptureException(err)
+    }),
+)
+```
+
+### Defaults
+
+| Parameter | Default |
+|-----------|---------|
+| Input buffer | 100 messages |
+| Job buffer | 1000 jobs |
+| Worker count | 4 |
+| Send timeout | 100ms |
 
 ## Architecture
 
@@ -171,9 +205,7 @@ loggerService.AddLogger("custom", &CustomPublisher{})
                    └──────────┘           └──────────┘          └──────────┘
 ```
 
-## Configuration
-
-### Log Levels
+## Log Levels
 
 ```go
 models.DebugLevel   // Verbose debugging information
@@ -185,20 +217,13 @@ models.PanicLevel   // Panic level
 models.FatalLevel   // Fatal errors (calls os.Exit)
 ```
 
-### Service Configuration
-
-The logger service has sensible defaults:
-- Input buffer: 100 messages
-- Job buffer: 1000 jobs
-- Worker count: 4 workers
-- Send timeout: 100ms
-
 ## Performance Considerations
 
-- **Non-blocking**: All log operations are asynchronous via goroutines
-- **Buffered channels**: Prevents blocking on high-volume logging
-- **Worker pool**: Parallel processing of log messages
-- **Timeout protection**: Prevents slow publishers from blocking the system
+- **Non-blocking**: Log sends drop messages when the channel is full rather than blocking the caller
+- **Buffered channels**: Configurable buffer sizes for high-volume logging
+- **Worker pool**: Parallel processing of log messages across publishers
+- **Timeout protection**: Prevents slow publishers from blocking the worker pool
+- **Panic recovery**: Workers recover from publisher panics without crashing
 
 ## Best Practices
 
@@ -206,7 +231,7 @@ The logger service has sensible defaults:
 2. **Use components**: Tag logs with component names for easier filtering
 3. **Structured fields**: Use typed fields instead of formatting strings
 4. **Stack traces sparingly**: Only enable for errors that need debugging
-5. **Graceful shutdown**: Call `loggerService.Stop()` to cleanly shutdown the service and flush all logs
+5. **Graceful shutdown**: Always call `service.Stop()` (or use `defer`) to flush all pending logs
 
 ## Contributing
 
